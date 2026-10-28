@@ -2,9 +2,10 @@
 """SQLite Schema and Stats Diff Tool."""
 
 import argparse
+import json
 import sqlite3
 import sys
-from typing import Dict, Any, List
+from typing import Dict, Any
 
 
 def inspect_db(db_path: str) -> Dict[str, Any]:
@@ -67,16 +68,63 @@ def diff_databases(db1_data: Dict[str, Any], db2_data: Dict[str, Any]) -> Dict[s
     }
 
 
+def format_text_diff(diff: Dict[str, Any]) -> str:
+    """Format database diff as clean human-readable text."""
+    lines = []
+    if diff["added"]:
+        lines.append("=== Added Tables ===")
+        for item in diff["added"]:
+            lines.append(f"  + {item['table']} ({item['row_count']} rows)")
+        lines.append("")
+
+    if diff["removed"]:
+        lines.append("=== Removed Tables ===")
+        for item in diff["removed"]:
+            lines.append(f"  - {item['table']} ({item['row_count']} rows)")
+        lines.append("")
+
+    if diff["modified"]:
+        lines.append("=== Modified Tables ===")
+        for item in diff["modified"]:
+            lines.append(f"  * Table: {item['table']}")
+            if item["schema_changed"]:
+                lines.append("    Schema changed!")
+                lines.append(f"    Old: {item['sql_a']}")
+                lines.append(f"    New: {item['sql_b']}")
+            if item["row_count_delta"] != 0:
+                sign = "+" if item["row_count_delta"] > 0 else ""
+                lines.append(
+                    f"    Rows: {item['row_count_a']} -> {item['row_count_b']} ({sign}{item['row_count_delta']})"
+                )
+            lines.append("")
+
+    if not (diff["added"] or diff["removed"] or diff["modified"]):
+        lines.append("Databases are identical.")
+
+    return "\n".join(lines)
+
+
 def main():
-    parser = argparse.ArgumentParser(description="Compare two SQLite databases.")
+    parser = argparse.ArgumentParser(description="Compare schemas and row counts of two SQLite databases.")
     parser.add_argument("db1", help="Path to first SQLite database")
     parser.add_argument("db2", help="Path to second SQLite database")
+    parser.add_argument("--json", action="store_true", help="Output diff as JSON")
+
     args = parser.parse_args()
 
-    db1_data = inspect_db(args.db1)
-    db2_data = inspect_db(args.db2)
+    try:
+        db1_data = inspect_db(args.db1)
+        db2_data = inspect_db(args.db2)
+    except sqlite3.Error as e:
+        print(f"Database error: {e}", file=sys.stderr)
+        sys.exit(1)
+
     diff = diff_databases(db1_data, db2_data)
-    print(diff)
+
+    if args.json:
+        print(json.dumps(diff, indent=2))
+    else:
+        print(format_text_diff(diff))
 
 
 if __name__ == "__main__":
