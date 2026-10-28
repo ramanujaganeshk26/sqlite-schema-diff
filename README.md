@@ -29,6 +29,3 @@ Run unit tests using python's built-in `unittest` module:
 ```bash
 python3 -m unittest test_sqlite_diff.py
 ```
-
----
-_This project was scaffolded with the help of an AI agent._
